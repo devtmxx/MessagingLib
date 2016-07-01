@@ -37,6 +37,7 @@
           <artifactSet>
             <includes>
               <include>net.tmxx:messaging-lib-core</include>
+              <include>com.google.guava:guava</include>
             </includes>
           </artifactSet>
         </configuration>
