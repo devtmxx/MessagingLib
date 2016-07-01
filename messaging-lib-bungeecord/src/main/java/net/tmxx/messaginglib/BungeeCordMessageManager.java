@@ -17,6 +17,7 @@
  */
 package net.tmxx.messaginglib;
 
+import com.google.common.reflect.ClassPath;
 import net.md_5.bungee.api.connection.ProxiedPlayer;
 import net.md_5.bungee.api.plugin.Plugin;
 import net.tmxx.messaginglib.core.MessageManager;
@@ -32,6 +33,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -99,15 +101,23 @@ public class BungeeCordMessageManager implements MessageManager<Plugin, ProxiedP
     }
 
     /**
-     * !! THIS IS CURRENTLY NOT SUPPORTED !!
-     *
      * Registers all listener found in the specified directory.
      * @param path The path to the directory containing the listeners
      * @param origin The origin to register all found listeners to
      */
     @Override
     public void registerListeners( String path, Plugin origin ) {
-        // THIS IS CURRENTLY NOT SUPPORTED
+        try {
+            for ( ClassPath.ClassInfo classInfo : ClassPath.from( origin.getClass().getClassLoader() ).getTopLevelClasses( path ) ) {
+                Class<?> clazz = classInfo.load();
+                if ( MessageListener.class.isAssignableFrom( clazz ) ) {
+                    this.registerListener( ( MessageListener ) clazz.newInstance(), origin );
+                    origin.getLogger().info( "Registered plugin message listener: " + clazz.getName() );
+                }
+            }
+        } catch ( IOException | IllegalAccessException | InstantiationException e ) {
+            e.printStackTrace();
+        }
     }
 
     /**

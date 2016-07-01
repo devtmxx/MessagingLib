@@ -17,6 +17,7 @@
  */
 package net.tmxx.messaginglib;
 
+import com.google.common.reflect.ClassPath;
 import net.tmxx.messaginglib.core.MessageManager;
 import net.tmxx.messaginglib.core.listener.MessageHandler;
 import net.tmxx.messaginglib.core.message.BungeeCordMessage;
@@ -33,6 +34,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
@@ -51,7 +53,7 @@ public class BukkitMessageManager implements MessageManager<Plugin, Player> {
     /**
      * Contains all bungeecord message listeners.
      */
-    private Map<String, List<MethodContainer<Plugin>>> bungeeCordMessageListeners = new HashMap<>();
+    private Map<String, List<MethodContainer<Plugin>>> bukkitMessageListeners = new HashMap<>();
 
     /**
      * Contains all plugin message listeners.
@@ -77,13 +79,13 @@ public class BukkitMessageManager implements MessageManager<Plugin, Player> {
                         if ( BungeeCordMessage.class.isAssignableFrom( method.getParameterTypes()[0] ) ) {
                             try {
                                 String id = ( ( BungeeCordMessage ) method.getParameterTypes()[0].getDeclaredConstructor().newInstance() ).getSubChannel();
-                                List<MethodContainer<Plugin>> methodContainers = this.bungeeCordMessageListeners.get( id );
+                                List<MethodContainer<Plugin>> methodContainers = this.bukkitMessageListeners.get( id );
                                 if ( methodContainers == null ) {
                                     methodContainers = new ArrayList<>();
                                 }
                                 method.setAccessible( true );
                                 methodContainers.add( new MethodContainer<>( messageListener, method, origin ) );
-                                this.bungeeCordMessageListeners.put( id, methodContainers );
+                                this.bukkitMessageListeners.put( id, methodContainers );
                             } catch ( InstantiationException | IllegalAccessException | InvocationTargetException | NoSuchMethodException e ) {
                                 e.printStackTrace();
                             }
@@ -106,8 +108,6 @@ public class BukkitMessageManager implements MessageManager<Plugin, Player> {
     }
 
     /**
-     * !! THIS IS CURRENTLY NOT SUPPORTED !!
-     *
      * Registers all listener found in the specified directory.
      * @param path The path to the directory containing the listeners
      * @param origin The origin to register all found listeners to
@@ -115,7 +115,17 @@ public class BukkitMessageManager implements MessageManager<Plugin, Player> {
     @Deprecated
     @Override
     public void registerListeners( String path, Plugin origin ) {
-        // THIS IS CURRENTLY NOT SUPPORTED
+        try {
+            for ( ClassPath.ClassInfo classInfo : ClassPath.from( origin.getClass().getClassLoader() ).getTopLevelClasses( path ) ) {
+                Class<?> clazz = classInfo.load();
+                if ( MessageListener.class.isAssignableFrom( clazz ) ) {
+                    this.registerListener( ( MessageListener ) clazz.newInstance(), origin );
+                    origin.getLogger().info( "Registered plugin message listener: " + clazz.getName() );
+                }
+            }
+        } catch ( IOException | IllegalAccessException | InstantiationException e ) {
+            e.printStackTrace();
+        }
     }
 
     /**
@@ -126,8 +136,8 @@ public class BukkitMessageManager implements MessageManager<Plugin, Player> {
     @Override
     public void unregisterListener( MessageListener messageListener ) {
         // Unregister BungeeCord message listeners
-        for ( String key : this.bungeeCordMessageListeners.keySet() ) {
-            Iterator<MethodContainer<Plugin>> iterator = this.bungeeCordMessageListeners.get( key ).iterator();
+        for ( String key : this.bukkitMessageListeners.keySet() ) {
+            Iterator<MethodContainer<Plugin>> iterator = this.bukkitMessageListeners.get( key ).iterator();
 
             while ( iterator.hasNext() ) {
                 MethodContainer methodContainer = iterator.next();
@@ -157,8 +167,8 @@ public class BukkitMessageManager implements MessageManager<Plugin, Player> {
     @Override
     public void unregisterListeners( Plugin origin ) {
         // Unregister BungeeCord message listeners
-        for ( String key : this.bungeeCordMessageListeners.keySet() ) {
-            Iterator<MethodContainer<Plugin>> iterator = this.bungeeCordMessageListeners.get( key ).iterator();
+        for ( String key : this.bukkitMessageListeners.keySet() ) {
+            Iterator<MethodContainer<Plugin>> iterator = this.bukkitMessageListeners.get( key ).iterator();
 
             while ( iterator.hasNext() ) {
                 MethodContainer methodContainer = iterator.next();
@@ -234,8 +244,8 @@ public class BukkitMessageManager implements MessageManager<Plugin, Player> {
 
             bungeeCordMessage.read( inputStream );
 
-            if ( this.bungeeCordMessageListeners.containsKey( id ) ) {
-                for ( MethodContainer methodContainer : this.bungeeCordMessageListeners.get( id ) ) {
+            if ( this.bukkitMessageListeners.containsKey( id ) ) {
+                for ( MethodContainer methodContainer : this.bukkitMessageListeners.get( id ) ) {
                     try {
                         methodContainer.getMethod().invoke( methodContainer.getMessageListener(), bungeeCordMessage, player );
                     } catch ( Exception e ) {
